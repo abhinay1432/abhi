@@ -1,15 +1,14 @@
 import streamlit as st
 import numpy as np
 import tensorflow as tf
-import cv2
-from PIL import Image
-import geocoder
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 import io
+from PIL import Image
+import time
 
 # Load the trained model
 model = tf.keras.models.load_model("fire_detection_model.keras")
@@ -22,20 +21,15 @@ def preprocess_image(image):
     image = np.expand_dims(image, axis=0)  # Add batch dimension
     return image
 
-# Function to get live location
-def get_location():
-    g = geocoder.ip('me')  # Get location using IP address
-    if g.ok:
-        latitude, longitude = g.latlng
-        google_maps_link = f"https://www.google.com/maps?q={latitude},{longitude}"
-        return f"Latitude: {latitude}, Longitude: {longitude}", google_maps_link
-    return "Location not available", ""
-
-# Function to send email with image attachment
-def send_email(location, google_maps_link, image, recipient_email="abhinaypyasi@gmail.com"):
+# Function to send email with image and GPS location
+def send_email(latitude, longitude, image, recipient_email="abhinaypyasi@gmail.com"):
     sender_email = "a80614436@gmail.com"
     sender_password = "fulf cqad ktxf nzyy"  # Use App Password for security
     subject = "🔥 Fire Alert with Live Location!"
+
+    # Create Google Maps link
+    google_maps_link = f"https://www.google.com/maps?q={latitude},{longitude}"
+    location_text = f"Latitude: {latitude}, Longitude: {longitude}"
 
     # Create email message
     msg = MIMEMultipart()
@@ -44,7 +38,7 @@ def send_email(location, google_maps_link, image, recipient_email="abhinaypyasi@
     msg["Subject"] = subject
 
     # Email body
-    body = f"Fire detected! 🚨\nLocation: {location}\nGoogle Maps: {google_maps_link}\nPlease take immediate action!"
+    body = f"Fire detected! 🚨\nLocation: {location_text}\nGoogle Maps: {google_maps_link}\nPlease take immediate action!"
     msg.attach(MIMEText(body, "plain"))
 
     # Convert image to bytes
@@ -65,13 +59,45 @@ def send_email(location, google_maps_link, image, recipient_email="abhinaypyasi@
         server.login(sender_email, sender_password)
         server.sendmail(sender_email, recipient_email, msg.as_string())
         server.quit()
-        return "Email with image sent successfully!"
+        return "✅ Email with live GPS location sent successfully!"
     except Exception as e:
-        return f"Error sending email: {e}"
+        return f"❌ Error sending email: {e}"
 
 # Streamlit UI
 st.title("🔥 Fire Detection App 🔥")
 st.write("Upload an image to check if fire is present.")
+
+# JavaScript to Fetch GPS Coordinates using Streamlit components
+get_location_script = """
+<script>
+navigator.geolocation.getCurrentPosition(
+    (position) => {
+        let coords = position.coords.latitude + "," + position.coords.longitude;
+        document.getElementById("location-data").value = coords;
+    },
+    (error) => {
+        document.getElementById("location-data").value = "0,0";
+    }
+);
+</script>
+<input type="text" id="location-data" name="location" value="0,0">
+"""
+
+st.components.v1.html(get_location_script, height=50)
+
+# **Wait for GPS location to load**
+time.sleep(2)  # Wait for script execution
+
+# Read GPS Coordinates
+location_input = st.text_input("📍 Live Location (Latitude,Longitude):", "0,0")
+latitude, longitude = map(float, location_input.split(","))
+
+# Display location
+if latitude == 0 and longitude == 0:
+    st.warning("⚠️ GPS location not captured. Please enable location access and refresh the page.")
+else:
+    st.success(f"📍 Live Location: Latitude {latitude}, Longitude {longitude}")
+    st.markdown(f"[🔗 View on Google Maps](https://www.google.com/maps?q={latitude},{longitude})")
 
 uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "png", "jpeg"])
 
@@ -86,19 +112,15 @@ if uploaded_file is not None:
 
     # Interpret the result
     fire_probability = prediction[0][0]
-    
-    if fire_probability <= 0.5:
-        st.error(f"🔥 Fire Detected! ")
 
-        # Get live location
-        location, google_maps_link = get_location()
-        st.warning(f"📍 Live Location: {location}")
-        if google_maps_link:
-            st.markdown(f"[🔗 View on Google Maps]({google_maps_link})")
+    if fire_probability < 0.5:  # Fire detected if probability > 0.5
+        st.error("🔥 Fire Detected!")
 
-        # Send email alert with image
-        email_status = send_email(location, google_maps_link, image)
-        st.info(email_status)
-        
+        if latitude != 0 and longitude != 0:
+            # Send email alert with GPS location
+            email_status = send_email(latitude, longitude, image)
+            st.info(email_status)
+        else:
+            st.warning("⚠️ Cannot send email: GPS location not available.")
     else:
-         st.success(f"✅ No Fire Detected")
+        st.success("✅ No Fire Detected.")
