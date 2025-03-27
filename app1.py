@@ -22,7 +22,7 @@ def preprocess_image(image):
     return image
 
 # Function to send email with image and GPS location
-def send_email(latitude, longitude, image, recipient_email="principal_uitjhabua@rgpv.ac.in"):
+def send_email(latitude, longitude, image, recipient_email="abhinaypyasi@gmail.com"):
     sender_email = "a80614436@gmail.com"
     sender_password = "fulf cqad ktxf nzyy"  # Use App Password for security
     subject = "🔥 Fire Alert with Live Location!"
@@ -72,7 +72,7 @@ gps_script = """
 <script>
 navigator.geolocation.getCurrentPosition(
     (position) => {
-        let coords = position.coords.latitude + "," + position.coords.longitude;
+        const coords = position.coords.latitude + "," + position.coords.longitude;
         document.getElementById("location-data").value = coords;
         document.getElementById("hidden-form").dispatchEvent(new Event("submit"));
     },
